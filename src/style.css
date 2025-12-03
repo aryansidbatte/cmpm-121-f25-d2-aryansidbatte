@@ -3,3 +3,14 @@
   vertical-align: top;
   border: 1px solid salmon;
 }
+
+/* Canvas styling for the demo UI (thin black border, rounded corners, drop shadow) */
+.drawing-canvas {
+  width: 256px; /* CSS visual width */
+  height: 256px; /* CSS visual height */
+  border: 1px solid #000;
+  border-radius: 8px;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.18));
+  display: block;
+  margin: 12px 0;
+}
