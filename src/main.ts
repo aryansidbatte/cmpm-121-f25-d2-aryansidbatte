@@ -41,9 +41,31 @@ ctx.strokeStyle = "#000";
 ctx.lineWidth = 4;
 
 type Point = { x: number; y: number };
-let strokes: Point[][] = [];
-let redoStack: Point[][] = [];
-let currentStroke: Point[] | null = null;
+
+// Command object representing a marker line (display command)
+class MarkerLine {
+  points: Point[] = [];
+  constructor(start: Point) {
+    this.points.push(start);
+  }
+  drag(x: number, y: number) {
+    this.points.push({ x, y });
+  }
+  display(ctx: CanvasRenderingContext2D) {
+    if (this.points.length === 0) return;
+    ctx.beginPath();
+    ctx.moveTo(this.points[0].x, this.points[0].y);
+    for (let i = 1; i < this.points.length; i++) {
+      ctx.lineTo(this.points[i].x, this.points[i].y);
+    }
+    ctx.stroke();
+    ctx.closePath();
+  }
+}
+
+let strokes: MarkerLine[] = [];
+let redoStack: MarkerLine[] = [];
+let currentStroke: MarkerLine | null = null;
 let isDrawing = false;
 
 function getCanvasCoords(e: MouseEvent) {
@@ -55,17 +77,10 @@ function getCanvasCoords(e: MouseEvent) {
 
 // Redraw observer: listens for `drawing-changed` and redraws the full canvas
 canvas.addEventListener("drawing-changed", () => {
-  // Clear and redraw all strokes
+  // Clear and redraw all display commands
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  for (const stroke of strokes) {
-    if (stroke.length === 0) continue;
-    ctx.beginPath();
-    ctx.moveTo(stroke[0].x, stroke[0].y);
-    for (let i = 1; i < stroke.length; i++) {
-      ctx.lineTo(stroke[i].x, stroke[i].y);
-    }
-    ctx.stroke();
-    ctx.closePath();
+  for (const cmd of strokes) {
+    cmd.display(ctx);
   }
 });
 
@@ -82,7 +97,7 @@ function updateToolbarButtons() {
 canvas.addEventListener("mousedown", (e) => {
   isDrawing = true;
   const p = getCanvasCoords(e);
-  currentStroke = [{ x: p.x, y: p.y }];
+  currentStroke = new MarkerLine({ x: p.x, y: p.y });
   strokes.push(currentStroke);
   // When starting a new stroke, clear the redo stack
   redoStack = [];
@@ -93,7 +108,7 @@ canvas.addEventListener("mousedown", (e) => {
 canvas.addEventListener("mousemove", (e) => {
   if (!isDrawing || !currentStroke) return;
   const p = getCanvasCoords(e);
-  currentStroke.push({ x: p.x, y: p.y });
+  currentStroke.drag(p.x, p.y);
   // Notify observers after each point is added
   dispatchDrawingChanged();
 });
