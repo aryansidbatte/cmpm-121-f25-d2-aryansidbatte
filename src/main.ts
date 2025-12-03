@@ -19,6 +19,19 @@ clearButton.textContent = "Clear";
 clearButton.className = "clear-button";
 document.body.appendChild(clearButton);
 
+// Add Undo and Redo buttons
+const undoButton = document.createElement("button");
+undoButton.textContent = "Undo";
+undoButton.className = "undo-button toolbar-button";
+undoButton.disabled = true;
+document.body.appendChild(undoButton);
+
+const redoButton = document.createElement("button");
+redoButton.textContent = "Redo";
+redoButton.className = "redo-button toolbar-button";
+redoButton.disabled = true;
+document.body.appendChild(redoButton);
+
 // Drawing state and stroke storage
 const ctx = canvas.getContext("2d");
 if (!ctx) throw new Error("Could not get canvas context");
@@ -29,6 +42,7 @@ ctx.lineWidth = 4;
 
 type Point = { x: number; y: number };
 let strokes: Point[][] = [];
+let redoStack: Point[][] = [];
 let currentStroke: Point[] | null = null;
 let isDrawing = false;
 
@@ -60,12 +74,20 @@ function dispatchDrawingChanged() {
   canvas.dispatchEvent(ev);
 }
 
+function updateToolbarButtons() {
+  undoButton.disabled = strokes.length === 0;
+  redoButton.disabled = redoStack.length === 0;
+}
+
 canvas.addEventListener("mousedown", (e) => {
   isDrawing = true;
   const p = getCanvasCoords(e);
   currentStroke = [{ x: p.x, y: p.y }];
   strokes.push(currentStroke);
+  // When starting a new stroke, clear the redo stack
+  redoStack = [];
   dispatchDrawingChanged();
+  updateToolbarButtons();
 });
 
 canvas.addEventListener("mousemove", (e) => {
@@ -86,7 +108,31 @@ canvas.addEventListener("mouseup", stopDrawing);
 canvas.addEventListener("mouseout", stopDrawing);
 
 clearButton.addEventListener("click", () => {
+  // Clear display list and redo stack
+  if (strokes.length === 0) return;
+  redoStack = [];
   strokes = [];
   currentStroke = null;
   dispatchDrawingChanged();
+  updateToolbarButtons();
+});
+
+undoButton.addEventListener("click", () => {
+  if (strokes.length === 0) return;
+  const last = strokes.pop();
+  if (last) {
+    redoStack.push(last);
+  }
+  dispatchDrawingChanged();
+  updateToolbarButtons();
+});
+
+redoButton.addEventListener("click", () => {
+  if (redoStack.length === 0) return;
+  const item = redoStack.pop();
+  if (item) {
+    strokes.push(item);
+  }
+  dispatchDrawingChanged();
+  updateToolbarButtons();
 });

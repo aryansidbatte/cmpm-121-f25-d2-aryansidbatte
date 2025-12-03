@@ -29,3 +29,25 @@
 .clear-button:hover {
   background: #f5f5f5;
 }
+
+/* Shared toolbar button styles */
+.toolbar-button {
+  display: inline-block;
+  padding: 6px 12px;
+  font-size: 14px;
+  border-radius: 6px;
+  border: 1px solid #333;
+  background: #fff;
+  cursor: pointer;
+  margin-left: 6px;
+}
+
+.toolbar-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.undo-button:hover:not(:disabled),
+.redo-button:hover:not(:disabled) {
+  background: #f5f5f5;
+}
