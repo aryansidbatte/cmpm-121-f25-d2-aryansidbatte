@@ -19,7 +19,7 @@ clearButton.textContent = "Clear";
 clearButton.className = "clear-button";
 document.body.appendChild(clearButton);
 
-// Drawing state
+// Drawing state and stroke storage
 const ctx = canvas.getContext("2d");
 if (!ctx) throw new Error("Could not get canvas context");
 ctx.lineCap = "round";
@@ -27,9 +27,10 @@ ctx.lineJoin = "round";
 ctx.strokeStyle = "#000";
 ctx.lineWidth = 4;
 
+type Point = { x: number; y: number };
+let strokes: Point[][] = [];
+let currentStroke: Point[] | null = null;
 let isDrawing = false;
-let lastX = 0;
-let lastY = 0;
 
 function getCanvasCoords(e: MouseEvent) {
   const rect = canvas.getBoundingClientRect();
@@ -38,34 +39,54 @@ function getCanvasCoords(e: MouseEvent) {
   return { x, y };
 }
 
+// Redraw observer: listens for `drawing-changed` and redraws the full canvas
+canvas.addEventListener("drawing-changed", () => {
+  // Clear and redraw all strokes
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  for (const stroke of strokes) {
+    if (stroke.length === 0) continue;
+    ctx.beginPath();
+    ctx.moveTo(stroke[0].x, stroke[0].y);
+    for (let i = 1; i < stroke.length; i++) {
+      ctx.lineTo(stroke[i].x, stroke[i].y);
+    }
+    ctx.stroke();
+    ctx.closePath();
+  }
+});
+
+function dispatchDrawingChanged() {
+  const ev = new Event("drawing-changed");
+  canvas.dispatchEvent(ev);
+}
+
 canvas.addEventListener("mousedown", (e) => {
   isDrawing = true;
   const p = getCanvasCoords(e);
-  lastX = p.x;
-  lastY = p.y;
-  // start a new path so each stroke is continuous
-  ctx.beginPath();
-  ctx.moveTo(lastX, lastY);
+  currentStroke = [{ x: p.x, y: p.y }];
+  strokes.push(currentStroke);
+  dispatchDrawingChanged();
 });
 
 canvas.addEventListener("mousemove", (e) => {
-  if (!isDrawing) return;
+  if (!isDrawing || !currentStroke) return;
   const p = getCanvasCoords(e);
-  ctx.lineTo(p.x, p.y);
-  ctx.stroke();
-  lastX = p.x;
-  lastY = p.y;
+  currentStroke.push({ x: p.x, y: p.y });
+  // Notify observers after each point is added
+  dispatchDrawingChanged();
 });
 
 function stopDrawing() {
   if (!isDrawing) return;
   isDrawing = false;
-  ctx.closePath();
+  currentStroke = null;
 }
 
 canvas.addEventListener("mouseup", stopDrawing);
 canvas.addEventListener("mouseout", stopDrawing);
 
 clearButton.addEventListener("click", () => {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  strokes = [];
+  currentStroke = null;
+  dispatchDrawingChanged();
 });
