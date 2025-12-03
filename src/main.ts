@@ -43,6 +43,17 @@ thickButton.textContent = "Thick";
 thickButton.className = "tool-button toolbar-button";
 document.body.appendChild(thickButton);
 
+// Sticker tool buttons (emoji)
+const stickerButtons: HTMLButtonElement[] = [];
+const stickers = ["😀", "🌟", "🎵"];
+for (const emo of stickers) {
+  const b = document.createElement("button");
+  b.textContent = emo;
+  b.className = "tool-button toolbar-button sticker-button";
+  document.body.appendChild(b);
+  stickerButtons.push(b);
+}
+
 // Drawing state and stroke storage
 const ctx = canvas.getContext("2d");
 if (!ctx) throw new Error("Could not get canvas context");
@@ -79,11 +90,18 @@ class MarkerLine {
   }
 }
 
-let strokes: MarkerLine[] = [];
-let redoStack: MarkerLine[] = [];
-let currentStroke: MarkerLine | null = null;
+// Commands can be MarkerLine or StickerCommand — use a common type
+type Command = MarkerLine | StickerCommand;
+
+let strokes: Command[] = [];
+let redoStack: Command[] = [];
+let currentStroke: Command | null = null;
+// Current tool: 'marker' or 'sticker'
+let currentTool: "marker" | "sticker" = "marker";
 // Current tool thickness (default thin)
 let currentThickness = 2;
+// Current sticker emoji when sticker tool selected
+let currentSticker: string | null = null;
 
 // Initialize tool selection UI
 function selectTool(button: HTMLButtonElement, thickness: number) {
@@ -92,6 +110,9 @@ function selectTool(button: HTMLButtonElement, thickness: number) {
   thickButton.classList.remove("selected");
   button.classList.add("selected");
   currentThickness = thickness;
+  currentTool = "marker";
+  // deselect sticker buttons
+  for (const sb of stickerButtons) sb.classList.remove("selected");
 }
 
 // Default selection: Thin
@@ -99,6 +120,25 @@ selectTool(thinButton, 2);
 
 thinButton.addEventListener("click", () => selectTool(thinButton, 2));
 thickButton.addEventListener("click", () => selectTool(thickButton, 8));
+
+// Sticker selection
+function selectSticker(button: HTMLButtonElement, emoji: string) {
+  // deselect marker buttons
+  thinButton.classList.remove("selected");
+  thickButton.classList.remove("selected");
+  // deselect all sticker buttons then select this one
+  for (const sb of stickerButtons) sb.classList.remove("selected");
+  button.classList.add("selected");
+  currentTool = "sticker";
+  currentSticker = emoji;
+  // Fire a tool-moved event so UI can update preview
+  const ev = new CustomEvent("tool-moved", { detail: { emoji } });
+  canvas.dispatchEvent(ev);
+}
+
+stickerButtons.forEach((b, i) =>
+  b.addEventListener("click", () => selectSticker(b, stickers[i]))
+);
 let isDrawing = false;
 
 function getCanvasCoords(e: MouseEvent) {
@@ -151,13 +191,64 @@ class ToolPreview {
 }
 
 // Global nullable reference to preview (stored on window to keep simple)
+// Global preview may be ToolPreview or StickerPreview
 (window as any).__toolPreview__ = null as ToolPreview | null;
+
+// Sticker preview draws the emoji at the cursor
+class StickerPreview {
+  x: number;
+  y: number;
+  emoji: string;
+  size: number;
+  constructor(x: number, y: number, emoji: string, size = 24) {
+    this.x = x;
+    this.y = y;
+    this.emoji = emoji;
+    this.size = size;
+  }
+  draw(ctx: CanvasRenderingContext2D) {
+    ctx.save();
+    ctx.font = `${this.size}px serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "rgba(0,0,0,0.9)";
+    ctx.fillText(this.emoji, this.x, this.y);
+    ctx.restore();
+  }
+}
 
 // When the tool moves, re-render (tool-moved event carries position in detail)
 canvas.addEventListener("tool-moved", (e: Event) => {
   // simply trigger a redraw which will render the preview if present
   dispatchDrawingChanged();
 });
+
+// Sticker command placed into the display list. drag(x,y) repositions the sticker.
+class StickerCommand {
+  x: number;
+  y: number;
+  emoji: string;
+  size: number;
+  constructor(x: number, y: number, emoji: string, size = 24) {
+    this.x = x;
+    this.y = y;
+    this.emoji = emoji;
+    this.size = size;
+  }
+  drag(x: number, y: number) {
+    this.x = x;
+    this.y = y;
+  }
+  display(ctx: CanvasRenderingContext2D) {
+    ctx.save();
+    ctx.font = `${this.size}px serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#000";
+    ctx.fillText(this.emoji, this.x, this.y);
+    ctx.restore();
+  }
+}
 
 function updateToolbarButtons() {
   undoButton.disabled = strokes.length === 0;
@@ -167,35 +258,61 @@ function updateToolbarButtons() {
 canvas.addEventListener("mousedown", (e) => {
   isDrawing = true;
   const p = getCanvasCoords(e);
-  currentStroke = new MarkerLine({ x: p.x, y: p.y }, currentThickness);
-  strokes.push(currentStroke);
-  // When starting a new stroke, clear the redo stack
-  redoStack = [];
-  // remove any preview while drawing
-  (window as any).__toolPreview__ = null;
-  dispatchDrawingChanged();
-  updateToolbarButtons();
+  if (currentTool === "marker") {
+    currentStroke = new MarkerLine({ x: p.x, y: p.y }, currentThickness);
+    strokes.push(currentStroke);
+    // When starting a new stroke, clear the redo stack
+    redoStack = [];
+    // remove any preview while drawing
+    (window as any).__toolPreview__ = null;
+    dispatchDrawingChanged();
+    updateToolbarButtons();
+  } else if (currentTool === "sticker" && currentSticker) {
+    // Start a sticker command which can be dragged to position
+    const size = Math.max(18, currentThickness * 6);
+    const stickerCmd = new StickerCommand(p.x, p.y, currentSticker, size);
+    currentStroke = stickerCmd;
+    strokes.push(currentStroke);
+    redoStack = [];
+    // keep isDrawing true so mousemove will reposition the sticker until mouseup
+    (window as any).__toolPreview__ = null;
+    dispatchDrawingChanged();
+    updateToolbarButtons();
+  }
 });
 
 canvas.addEventListener("mousemove", (e) => {
   const p = getCanvasCoords(e);
-  // Always notify that the tool moved (carries position)
-  const toolEv = new CustomEvent("tool-moved", { detail: { x: p.x, y: p.y } });
-  canvas.dispatchEvent(toolEv);
-
+  // Update preview first so redraw shows it
   if (!isDrawing || !currentStroke) {
-    // Update preview only when not drawing
-    (window as any).__toolPreview__ = new ToolPreview(
-      p.x,
-      p.y,
-      currentThickness,
-    );
+    if (currentTool === "marker") {
+      (window as any).__toolPreview__ = new ToolPreview(
+        p.x,
+        p.y,
+        currentThickness,
+      );
+    } else if (currentTool === "sticker" && currentSticker) {
+      const size = Math.max(18, currentThickness * 6);
+      (window as any).__toolPreview__ = new StickerPreview(
+        p.x,
+        p.y,
+        currentSticker,
+        size,
+      );
+    }
+    const toolEv = new CustomEvent("tool-moved", {
+      detail: { x: p.x, y: p.y },
+    });
+    canvas.dispatchEvent(toolEv);
     return;
   }
 
   // When drawing, remove preview and add to current stroke
   (window as any).__toolPreview__ = null;
-  currentStroke.drag(p.x, p.y);
+  // currentStroke may be MarkerLine or StickerCommand
+  if (currentStroke) {
+    (currentStroke as any).drag(p.x, p.y);
+  }
   // Notify observers after each point is added
   dispatchDrawingChanged();
 });
