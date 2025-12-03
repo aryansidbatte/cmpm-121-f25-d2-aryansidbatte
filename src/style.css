@@ -14,3 +14,18 @@
   display: block;
   margin: 12px 0;
 }
+
+/* Simple clear button styles */
+.clear-button {
+  display: inline-block;
+  padding: 6px 12px;
+  font-size: 14px;
+  border-radius: 6px;
+  border: 1px solid #333;
+  background: #fff;
+  cursor: pointer;
+}
+
+.clear-button:hover {
+  background: #f5f5f5;
+}
