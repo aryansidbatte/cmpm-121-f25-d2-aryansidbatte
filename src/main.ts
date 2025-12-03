@@ -83,6 +83,41 @@ addStickerButton.addEventListener("click", () => {
 });
 document.body.appendChild(addStickerButton);
 
+// Tool slider (0-360) — interpreted as hue for marker color and rotation for stickers
+const sliderLabel = document.createElement("label");
+sliderLabel.textContent = "Tool value: ";
+const sliderValueSpan = document.createElement("span");
+sliderValueSpan.textContent = "0";
+sliderLabel.appendChild(sliderValueSpan);
+document.body.appendChild(sliderLabel);
+
+const slider = document.createElement("input");
+slider.type = "range";
+slider.min = "0";
+slider.max = "360";
+slider.value = "0";
+slider.className = "tool-slider";
+document.body.appendChild(slider);
+
+function getSliderVal(): number {
+  return Number(slider.value || "0");
+}
+
+slider.addEventListener("input", () => {
+  sliderValueSpan.textContent = slider.value;
+  // update any existing preview to reflect new value
+  const tp = (window as any).__toolPreview__;
+  if (tp) {
+    if (tp instanceof ToolPreview) {
+      tp.color = `hsl(${getSliderVal()}, 80%, 40%)`;
+    } else if (tp instanceof StickerPreview) {
+      tp.rotation = getSliderVal();
+    }
+  }
+  // redraw
+  dispatchDrawingChanged();
+});
+
 // Drawing state and stroke storage
 const ctx = canvas.getContext("2d");
 if (!ctx) throw new Error("Could not get canvas context");
@@ -97,9 +132,11 @@ type Point = { x: number; y: number };
 class MarkerLine {
   points: Point[] = [];
   thickness: number;
-  constructor(start: Point, thickness = 4) {
+  color: string;
+  constructor(start: Point, thickness = 4, color = "#000") {
     this.points.push(start);
     this.thickness = thickness;
+    this.color = color;
   }
   drag(x: number, y: number) {
     this.points.push({ x, y });
@@ -108,6 +145,7 @@ class MarkerLine {
     if (this.points.length === 0) return;
     ctx.save();
     ctx.lineWidth = this.thickness;
+    ctx.strokeStyle = this.color;
     ctx.beginPath();
     ctx.moveTo(this.points[0].x, this.points[0].y);
     for (let i = 1; i < this.points.length; i++) {
@@ -200,19 +238,28 @@ class ToolPreview {
   x: number;
   y: number;
   thickness: number;
-  constructor(x: number, y: number, thickness: number) {
+  color: string | null = null;
+  constructor(
+    x: number,
+    y: number,
+    thickness: number,
+    color: string | null = null,
+  ) {
     this.x = x;
     this.y = y;
     this.thickness = thickness;
+    this.color = color;
   }
   draw(ctx: CanvasRenderingContext2D) {
     ctx.save();
     ctx.beginPath();
-    ctx.strokeStyle = "rgba(0,0,0,0.6)";
     ctx.lineWidth = 1;
-    ctx.fillStyle = "rgba(0,0,0,0.12)";
+    ctx.strokeStyle = this.color ? this.color : "rgba(0,0,0,0.6)";
+    ctx.fillStyle = this.color ? this.color : "rgba(0,0,0,0.12)";
+    ctx.globalAlpha = 0.12;
     ctx.arc(this.x, this.y, this.thickness / 2, 0, Math.PI * 2);
     ctx.fill();
+    ctx.globalAlpha = 1;
     ctx.stroke();
     ctx.closePath();
     ctx.restore();
@@ -229,19 +276,23 @@ class StickerPreview {
   y: number;
   emoji: string;
   size: number;
-  constructor(x: number, y: number, emoji: string, size = 24) {
+  rotation: number;
+  constructor(x: number, y: number, emoji: string, size = 24, rotation = 0) {
     this.x = x;
     this.y = y;
     this.emoji = emoji;
     this.size = size;
+    this.rotation = rotation;
   }
   draw(ctx: CanvasRenderingContext2D) {
     ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate((this.rotation || 0) * Math.PI / 180);
     ctx.font = `${this.size}px serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillStyle = "rgba(0,0,0,0.9)";
-    ctx.fillText(this.emoji, this.x, this.y);
+    ctx.fillText(this.emoji, 0, 0);
     ctx.restore();
   }
 }
@@ -258,11 +309,13 @@ class StickerCommand {
   y: number;
   emoji: string;
   size: number;
+  rotation: number;
   constructor(x: number, y: number, emoji: string, size = 24) {
     this.x = x;
     this.y = y;
     this.emoji = emoji;
     this.size = size;
+    this.rotation = 0;
   }
   drag(x: number, y: number) {
     this.x = x;
@@ -270,11 +323,13 @@ class StickerCommand {
   }
   display(ctx: CanvasRenderingContext2D) {
     ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate((this.rotation || 0) * Math.PI / 180);
     ctx.font = `${this.size}px serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillStyle = "#000";
-    ctx.fillText(this.emoji, this.x, this.y);
+    ctx.fillText(this.emoji, 0, 0);
     ctx.restore();
   }
 }
@@ -288,7 +343,8 @@ canvas.addEventListener("mousedown", (e) => {
   isDrawing = true;
   const p = getCanvasCoords(e);
   if (currentTool === "marker") {
-    currentStroke = new MarkerLine({ x: p.x, y: p.y }, currentThickness);
+    const color = `hsl(${getSliderVal()}, 80%, 40%)`;
+    currentStroke = new MarkerLine({ x: p.x, y: p.y }, currentThickness, color);
     strokes.push(currentStroke);
     // When starting a new stroke, clear the redo stack
     redoStack = [];
@@ -300,6 +356,7 @@ canvas.addEventListener("mousedown", (e) => {
     // Start a sticker command which can be dragged to position
     const size = Math.max(18, currentThickness * 6);
     const stickerCmd = new StickerCommand(p.x, p.y, currentSticker, size);
+    stickerCmd.rotation = getSliderVal();
     currentStroke = stickerCmd;
     strokes.push(currentStroke);
     redoStack = [];
@@ -315,10 +372,12 @@ canvas.addEventListener("mousemove", (e) => {
   // Update preview first so redraw shows it
   if (!isDrawing || !currentStroke) {
     if (currentTool === "marker") {
+      const color = `hsl(${getSliderVal()}, 80%, 40%)`;
       (window as any).__toolPreview__ = new ToolPreview(
         p.x,
         p.y,
         currentThickness,
+        color,
       );
     } else if (currentTool === "sticker" && currentSticker) {
       const size = Math.max(18, currentThickness * 6);
@@ -327,6 +386,7 @@ canvas.addEventListener("mousemove", (e) => {
         p.y,
         currentSticker,
         size,
+        getSliderVal(),
       );
     }
     const toolEv = new CustomEvent("tool-moved", {
