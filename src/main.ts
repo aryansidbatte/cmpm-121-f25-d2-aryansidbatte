@@ -115,12 +115,49 @@ canvas.addEventListener("drawing-changed", () => {
   for (const cmd of strokes) {
     cmd.display(ctx);
   }
+  // Draw tool preview if available
+  if ((window as any).__toolPreview__) {
+    (window as any).__toolPreview__.draw(ctx);
+  }
 });
 
 function dispatchDrawingChanged() {
   const ev = new Event("drawing-changed");
   canvas.dispatchEvent(ev);
 }
+
+// Tool preview command (draws a circle matching the marker thickness)
+class ToolPreview {
+  x: number;
+  y: number;
+  thickness: number;
+  constructor(x: number, y: number, thickness: number) {
+    this.x = x;
+    this.y = y;
+    this.thickness = thickness;
+  }
+  draw(ctx: CanvasRenderingContext2D) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.strokeStyle = "rgba(0,0,0,0.6)";
+    ctx.lineWidth = 1;
+    ctx.fillStyle = "rgba(0,0,0,0.12)";
+    ctx.arc(this.x, this.y, this.thickness / 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.closePath();
+    ctx.restore();
+  }
+}
+
+// Global nullable reference to preview (stored on window to keep simple)
+(window as any).__toolPreview__ = null as ToolPreview | null;
+
+// When the tool moves, re-render (tool-moved event carries position in detail)
+canvas.addEventListener("tool-moved", (e: Event) => {
+  // simply trigger a redraw which will render the preview if present
+  dispatchDrawingChanged();
+});
 
 function updateToolbarButtons() {
   undoButton.disabled = strokes.length === 0;
@@ -134,13 +171,30 @@ canvas.addEventListener("mousedown", (e) => {
   strokes.push(currentStroke);
   // When starting a new stroke, clear the redo stack
   redoStack = [];
+  // remove any preview while drawing
+  (window as any).__toolPreview__ = null;
   dispatchDrawingChanged();
   updateToolbarButtons();
 });
 
 canvas.addEventListener("mousemove", (e) => {
-  if (!isDrawing || !currentStroke) return;
   const p = getCanvasCoords(e);
+  // Always notify that the tool moved (carries position)
+  const toolEv = new CustomEvent("tool-moved", { detail: { x: p.x, y: p.y } });
+  canvas.dispatchEvent(toolEv);
+
+  if (!isDrawing || !currentStroke) {
+    // Update preview only when not drawing
+    (window as any).__toolPreview__ = new ToolPreview(
+      p.x,
+      p.y,
+      currentThickness,
+    );
+    return;
+  }
+
+  // When drawing, remove preview and add to current stroke
+  (window as any).__toolPreview__ = null;
   currentStroke.drag(p.x, p.y);
   // Notify observers after each point is added
   dispatchDrawingChanged();
@@ -154,6 +208,12 @@ function stopDrawing() {
 
 canvas.addEventListener("mouseup", stopDrawing);
 canvas.addEventListener("mouseout", stopDrawing);
+
+// When mouse leaves canvas, remove preview and redraw
+canvas.addEventListener("mouseleave", () => {
+  (window as any).__toolPreview__ = null;
+  dispatchDrawingChanged();
+});
 
 clearButton.addEventListener("click", () => {
   // Clear display list and redo stack
