@@ -1,5 +1,11 @@
 import "./style.css";
 
+// Generic preview type used for window.__toolPreview__
+type Preview = { draw(ctx: CanvasRenderingContext2D): void } | null;
+declare global {
+  var __toolPreview__: Preview;
+}
+
 // Create and insert the app title via TypeScript (do not edit index.html)
 const appTitle = document.createElement("h1");
 appTitle.textContent = "Simple Drawing App — Demo";
@@ -51,7 +57,7 @@ document.body.appendChild(thickButton);
 
 // Sticker tool buttons (data-driven)
 const stickerButtons: HTMLButtonElement[] = [];
-let stickers: string[] = ["😀", "🌟", "❤️"];
+const stickers: string[] = ["😀", "🌟", "❤️"];
 
 function createStickerButton(emoji: string): HTMLButtonElement {
   const b = document.createElement("button");
@@ -106,7 +112,7 @@ function getSliderVal(): number {
 slider.addEventListener("input", () => {
   sliderValueSpan.textContent = slider.value;
   // update any existing preview to reflect new value
-  const tp = (window as any).__toolPreview__;
+  const tp = globalThis.__toolPreview__;
   if (tp) {
     if (tp instanceof ToolPreview) {
       tp.color = `hsl(${getSliderVal()}, 80%, 40%)`;
@@ -223,8 +229,8 @@ canvas.addEventListener("drawing-changed", () => {
     cmd.display(ctx);
   }
   // Draw tool preview if available
-  if ((window as any).__toolPreview__) {
-    (window as any).__toolPreview__.draw(ctx);
+  if (globalThis.__toolPreview__) {
+    globalThis.__toolPreview__.draw(ctx);
   }
 });
 
@@ -266,9 +272,9 @@ class ToolPreview {
   }
 }
 
-// Global nullable reference to preview (stored on window to keep simple)
+// Global nullable reference to preview (stored on globalThis to keep simple)
 // Global preview may be ToolPreview or StickerPreview
-(window as any).__toolPreview__ = null as ToolPreview | null;
+globalThis.__toolPreview__ = null;
 
 // Sticker preview draws the emoji at the cursor
 class StickerPreview {
@@ -298,7 +304,7 @@ class StickerPreview {
 }
 
 // When the tool moves, re-render (tool-moved event carries position in detail)
-canvas.addEventListener("tool-moved", (e: Event) => {
+canvas.addEventListener("tool-moved", (_e: Event) => {
   // simply trigger a redraw which will render the preview if present
   dispatchDrawingChanged();
 });
@@ -349,7 +355,7 @@ canvas.addEventListener("mousedown", (e) => {
     // When starting a new stroke, clear the redo stack
     redoStack = [];
     // remove any preview while drawing
-    (window as any).__toolPreview__ = null;
+    globalThis.__toolPreview__ = null;
     dispatchDrawingChanged();
     updateToolbarButtons();
   } else if (currentTool === "sticker" && currentSticker) {
@@ -361,7 +367,7 @@ canvas.addEventListener("mousedown", (e) => {
     strokes.push(currentStroke);
     redoStack = [];
     // keep isDrawing true so mousemove will reposition the sticker until mouseup
-    (window as any).__toolPreview__ = null;
+    globalThis.__toolPreview__ = null;
     dispatchDrawingChanged();
     updateToolbarButtons();
   }
@@ -373,7 +379,7 @@ canvas.addEventListener("mousemove", (e) => {
   if (!isDrawing || !currentStroke) {
     if (currentTool === "marker") {
       const color = `hsl(${getSliderVal()}, 80%, 40%)`;
-      (window as any).__toolPreview__ = new ToolPreview(
+      globalThis.__toolPreview__ = new ToolPreview(
         p.x,
         p.y,
         currentThickness,
@@ -381,7 +387,7 @@ canvas.addEventListener("mousemove", (e) => {
       );
     } else if (currentTool === "sticker" && currentSticker) {
       const size = Math.max(18, currentThickness * 6);
-      (window as any).__toolPreview__ = new StickerPreview(
+      globalThis.__toolPreview__ = new StickerPreview(
         p.x,
         p.y,
         currentSticker,
@@ -397,10 +403,14 @@ canvas.addEventListener("mousemove", (e) => {
   }
 
   // When drawing, remove preview and add to current stroke
-  (window as any).__toolPreview__ = null;
+  globalThis.__toolPreview__ = null;
   // currentStroke may be MarkerLine or StickerCommand
   if (currentStroke) {
-    (currentStroke as any).drag(p.x, p.y);
+    if (currentStroke instanceof MarkerLine) {
+      currentStroke.drag(p.x, p.y);
+    } else if (currentStroke instanceof StickerCommand) {
+      currentStroke.drag(p.x, p.y);
+    }
   }
   // Notify observers after each point is added
   dispatchDrawingChanged();
@@ -417,7 +427,7 @@ canvas.addEventListener("mouseout", stopDrawing);
 
 // When mouse leaves canvas, remove preview and redraw
 canvas.addEventListener("mouseleave", () => {
-  (window as any).__toolPreview__ = null;
+  globalThis.__toolPreview__ = null;
   dispatchDrawingChanged();
 });
 
@@ -472,7 +482,7 @@ exportButton.addEventListener("click", () => {
 
   // Execute all display commands (do NOT draw the preview)
   for (const cmd of strokes) {
-    (cmd as any).display(outCtx);
+    cmd.display(outCtx);
   }
 
   outCtx.restore();
