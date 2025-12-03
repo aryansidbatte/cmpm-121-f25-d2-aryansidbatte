@@ -43,16 +43,39 @@ thickButton.textContent = "Thick";
 thickButton.className = "tool-button toolbar-button";
 document.body.appendChild(thickButton);
 
-// Sticker tool buttons (emoji)
+// Sticker tool buttons (data-driven)
 const stickerButtons: HTMLButtonElement[] = [];
-const stickers = ["😀", "🌟", "🎵"];
-for (const emo of stickers) {
+let stickers: string[] = ["😀", "🌟", "🎵"];
+
+function createStickerButton(emoji: string): HTMLButtonElement {
   const b = document.createElement("button");
-  b.textContent = emo;
+  b.textContent = emoji;
   b.className = "tool-button toolbar-button sticker-button";
+  b.addEventListener("click", () => selectSticker(b, emoji));
   document.body.appendChild(b);
   stickerButtons.push(b);
+  return b;
 }
+
+// initialize buttons from the stickers array
+stickers.forEach((emo) => createStickerButton(emo));
+
+// Add custom sticker button
+const addStickerButton = document.createElement("button");
+addStickerButton.textContent = "Add Sticker";
+addStickerButton.className = "tool-button toolbar-button";
+addStickerButton.addEventListener("click", () => {
+  const input = prompt("Enter a sticker (emoji or text):", "⭐");
+  if (input === null) return; // cancelled
+  const val = input.trim();
+  if (val.length === 0) return;
+  // add to stickers array and create a button for it
+  stickers.push(val);
+  const newBtn = createStickerButton(val);
+  // select the newly created sticker
+  selectSticker(newBtn, val);
+});
+document.body.appendChild(addStickerButton);
 
 // Drawing state and stroke storage
 const ctx = canvas.getContext("2d");
