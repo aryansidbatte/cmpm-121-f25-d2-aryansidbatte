@@ -32,6 +32,12 @@ redoButton.className = "redo-button toolbar-button";
 redoButton.disabled = true;
 document.body.appendChild(redoButton);
 
+// Export button
+const exportButton = document.createElement("button");
+exportButton.textContent = "Export";
+exportButton.className = "export-button toolbar-button";
+document.body.appendChild(exportButton);
+
 // Marker tool buttons (thin / thick)
 const thinButton = document.createElement("button");
 thinButton.textContent = "Thin";
@@ -383,4 +389,40 @@ redoButton.addEventListener("click", () => {
   }
   dispatchDrawingChanged();
   updateToolbarButtons();
+});
+
+// Export handler: render all commands to a 1024x1024 canvas and download PNG
+exportButton.addEventListener("click", () => {
+  const SCALE = 4; // 256 -> 1024
+  const out = document.createElement("canvas");
+  out.width = 256 * SCALE;
+  out.height = 256 * SCALE;
+  const outCtx = out.getContext("2d");
+  if (!outCtx) {
+    alert("Export failed: unable to get canvas context");
+    return;
+  }
+  // Scale so that drawing commands (which assume a 256x256 canvas) fill the larger canvas
+  outCtx.save();
+  outCtx.scale(SCALE, SCALE);
+
+  // Optional: fill white background
+  outCtx.fillStyle = "#fff";
+  outCtx.fillRect(0, 0, out.width / SCALE, out.height / SCALE);
+
+  // Execute all display commands (do NOT draw the preview)
+  for (const cmd of strokes) {
+    (cmd as any).display(outCtx);
+  }
+
+  outCtx.restore();
+
+  // Trigger download
+  const dataUrl = out.toDataURL("image/png");
+  const a = document.createElement("a");
+  a.href = dataUrl;
+  a.download = "drawing.png";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 });
