@@ -51,3 +51,24 @@
 .redo-button:hover:not(:disabled) {
   background: #f5f5f5;
 }
+
+/* Tool buttons for marker selection */
+.tool-button {
+  display: inline-block;
+  padding: 6px 12px;
+  font-size: 14px;
+  border-radius: 6px;
+  border: 1px solid #333;
+  background: #fff;
+  cursor: pointer;
+  margin-left: 6px;
+}
+
+.tool-button.selected {
+  background: #e6f0ff;
+  border-color: #4a90e2;
+}
+
+.tool-button:hover:not(.selected) {
+  background: #f5f5f5;
+}

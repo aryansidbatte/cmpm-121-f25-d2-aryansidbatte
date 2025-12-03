@@ -32,6 +32,17 @@ redoButton.className = "redo-button toolbar-button";
 redoButton.disabled = true;
 document.body.appendChild(redoButton);
 
+// Marker tool buttons (thin / thick)
+const thinButton = document.createElement("button");
+thinButton.textContent = "Thin";
+thinButton.className = "tool-button toolbar-button";
+document.body.appendChild(thinButton);
+
+const thickButton = document.createElement("button");
+thickButton.textContent = "Thick";
+thickButton.className = "tool-button toolbar-button";
+document.body.appendChild(thickButton);
+
 // Drawing state and stroke storage
 const ctx = canvas.getContext("2d");
 if (!ctx) throw new Error("Could not get canvas context");
@@ -45,14 +56,18 @@ type Point = { x: number; y: number };
 // Command object representing a marker line (display command)
 class MarkerLine {
   points: Point[] = [];
-  constructor(start: Point) {
+  thickness: number;
+  constructor(start: Point, thickness = 4) {
     this.points.push(start);
+    this.thickness = thickness;
   }
   drag(x: number, y: number) {
     this.points.push({ x, y });
   }
   display(ctx: CanvasRenderingContext2D) {
     if (this.points.length === 0) return;
+    ctx.save();
+    ctx.lineWidth = this.thickness;
     ctx.beginPath();
     ctx.moveTo(this.points[0].x, this.points[0].y);
     for (let i = 1; i < this.points.length; i++) {
@@ -60,12 +75,30 @@ class MarkerLine {
     }
     ctx.stroke();
     ctx.closePath();
+    ctx.restore();
   }
 }
 
 let strokes: MarkerLine[] = [];
 let redoStack: MarkerLine[] = [];
 let currentStroke: MarkerLine | null = null;
+// Current tool thickness (default thin)
+let currentThickness = 2;
+
+// Initialize tool selection UI
+function selectTool(button: HTMLButtonElement, thickness: number) {
+  // remove selected class from both
+  thinButton.classList.remove("selected");
+  thickButton.classList.remove("selected");
+  button.classList.add("selected");
+  currentThickness = thickness;
+}
+
+// Default selection: Thin
+selectTool(thinButton, 2);
+
+thinButton.addEventListener("click", () => selectTool(thinButton, 2));
+thickButton.addEventListener("click", () => selectTool(thickButton, 8));
 let isDrawing = false;
 
 function getCanvasCoords(e: MouseEvent) {
@@ -97,7 +130,7 @@ function updateToolbarButtons() {
 canvas.addEventListener("mousedown", (e) => {
   isDrawing = true;
   const p = getCanvasCoords(e);
-  currentStroke = new MarkerLine({ x: p.x, y: p.y });
+  currentStroke = new MarkerLine({ x: p.x, y: p.y }, currentThickness);
   strokes.push(currentStroke);
   // When starting a new stroke, clear the redo stack
   redoStack = [];
