@@ -51,7 +51,7 @@ document.body.appendChild(thickButton);
 
 // Sticker tool buttons (data-driven)
 const stickerButtons: HTMLButtonElement[] = [];
-let stickers: string[] = ["😀", "🌟", "🎵"];
+let stickers: string[] = ["😀", "🌟", "❤️"];
 
 function createStickerButton(emoji: string): HTMLButtonElement {
   const b = document.createElement("button");
@@ -147,8 +147,8 @@ function selectTool(button: HTMLButtonElement, thickness: number) {
 // Default selection: Thin
 selectTool(thinButton, 2);
 
-thinButton.addEventListener("click", () => selectTool(thinButton, 2));
-thickButton.addEventListener("click", () => selectTool(thickButton, 8));
+thinButton.addEventListener("click", () => selectTool(thinButton, 3));
+thickButton.addEventListener("click", () => selectTool(thickButton, 6));
 
 // Sticker selection
 function selectSticker(button: HTMLButtonElement, emoji: string) {
